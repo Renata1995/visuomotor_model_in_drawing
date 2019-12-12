@@ -122,16 +122,3 @@ def affine_reg(img_draw, img_ref, output_path, lr=0.01, iter=200):
     plt.close()
 
     return init_loss, final_loss, np.abs(param[0]), translate, scale, warped_image
-
-# img_draw = 'a3.png'
-# img_ref = 'tracing_ref_400/square_ref.png'
-# init_loss, final_loss, ro, tran, scale, warped = affine_reg(img_draw, img_ref, 'transformed.png')
-# print init_loss, final_loss
-
-
-
-
-# write result images
-#sitk.WriteImage(warped_image.itk(), '/tmp/rigid_warped_image.vtk')
-#sitk.WriteImage(moving_image.itk(), '/tmp/rigid_moving_image.vtk')
-#sitk.WriteImage(fixed_image.itk(), '/tmp/rigid_fixed_image.vtk')

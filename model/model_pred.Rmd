@@ -1,0 +1,30 @@
+---
+title: "Model Prediction"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(lme4)
+library(groupdata2)
+library(dplyr)
+library(knitr) 
+library(broom) 
+library(hydroGOF)
+library(MASS)
+library(DescTools)
+library(broom)
+library(brms)
+library(reshape2)
+library(caret)
+```
+
+```{r}
+load("vm_model.rda")
+
+
+# fill in the following code
+# new_data = csv.read('filename')
+# pred = predict(ord.wid, new_data)
+```
+

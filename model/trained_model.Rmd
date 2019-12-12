@@ -1,0 +1,49 @@
+---
+title: "Train the Visuomotor Ability Evaulation Model"
+output: html_document
+---
+
+
+```{r}
+library(tidyverse)
+library(lme4)
+library(groupdata2)
+library(dplyr)
+library(knitr) 
+library(broom) 
+library(hydroGOF)
+library(MASS)
+library(DescTools)
+library(broom)
+library(brms)
+library(reshape2)
+library(caret)
+```
+
+#### Preprocessing
+##### Load data and convert types
+```{r}
+mdata = read.csv('tracing_final.csv')
+mdata$category = factor(mdata$category, levels = c('square', 'shape', 'circle'))
+
+mdata$has_ref = as.logical(mdata$has_ref)
+rater_data = mdata[mdata$button_pressed!=-10,]
+rater_data$button_pressed = factor(rater_data$button_pressed, levels = c(0, 1, 2, 3, 4), ordered=TRUE)
+
+trace = rater_data[rater_data$has_ref==TRUE,]
+copy = rater_data[rater_data$has_ref==FALSE,]
+```
+
+##### Train the model on all human ratings
+
+```{r}
+m2 = "button_pressed ~  post_tran * translate + post_tran * scale + post_tran * rotate + category * post_tran + category * rotate + category * translate + category * scale + (1|worker_id)"
+ord_wid = brm(m2, data=rater_data, family=cumulative("probit"))
+summary(ord_wid)
+```
+
+##### Save the model
+```{r}
+save(ord_wid, file = "vm_model.rda")
+```
+
