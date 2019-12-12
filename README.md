@@ -15,6 +15,7 @@ The model is able to reproduce similar evaluations as human raters and could be 
 
 ## Depended Projects
 - [Autograd Image Registration Laboratory](https://github.com/airlab-unibas/airlab)
+- [Kiddraw](https://github.com/brialorelle/kiddraw)
 
 ## Usage of the Model
 
