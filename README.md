@@ -8,8 +8,7 @@ In order to evaluate the developmental change of children’s visuomotor ability
 
 To evaluate the 9967 tracing and copying images from children, we then developed an automatic procedure to quantify children’s performance and collected adult ratings on a subset of the data to train and validate the model’s evaluation. 
 
-<img src ="analysis/rating.png" width="300px"/>
-<img src ="analysis/shapes.png" width="300px"/>
+![task](analysis/rating.png)
 
 The model is able to reproduce similar evaluations as human raters, and could be used in future research to rate children's visuomotor skills. Using the model on the full dataset, we found an age-related increase in children’s visuomotor ability in drawing.
 
