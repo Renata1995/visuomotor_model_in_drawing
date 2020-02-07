@@ -1,0 +1,449 @@
+---
+title: "Analysis on the tracing and copying raw data and human ratings"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(lme4)
+library(groupdata2)
+library(dplyr)
+library(knitr) 
+library(broom) 
+library(hydroGOF)
+library(MASS)
+library(DescTools)
+library(broom)
+library(brms)
+library(reshape2)
+library(caret)
+library(extrafont)
+font_import()
+loadfonts()
+require(cowplot)
+```
+
+Import data and calculate the average age of all children
+```{r}
+mdata = read.csv('museumstation_pre_pred.csv')
+mdata$category = factor(mdata$category, levels = c('square', 'shape', 'circle'))
+
+mdata$has_ref = as.logical(mdata$has_ref)
+mdata$norm_shape = scale(mdata$post_tran)
+mdata$norm_spatial = scale(mdata$spatial)
+
+# remove duplicated data
+mdata = distinct(mdata, session_id, category, has_ref, .keep_all = TRUE)
+
+all_trace = mdata[mdata$has_ref==TRUE,]
+all_copy = mdata[mdata$has_ref==FALSE,]
+sid = unique(mdata$session_id)
+
+all_children = distinct(mdata, session_id, .keep_all=TRUE)
+print(mean(all_children$age))
+```
+
+Seperate the input data into square_tracing, star_tracing, square_copy, and circle_copy
+```{r}
+circle_copy = all_copy[all_copy$category=='circle',]
+square_copy = all_copy[all_copy$category=='square',]
+square_trace = all_trace[all_trace$category == 'square',]
+shape_trace = all_trace[all_trace$category == 'shape', ]
+```
+
+Plot graphs for children's tracing and copying
+```{r}
+plot.ccopy = ggplot(data=circle_copy, aes(x=factor(age))) + 
+  geom_bar(stat="count", fill="steelblue") +
+  theme_minimal() + 
+  ggtitle('Circle Copying') + 
+  xlab('Age') + 
+  ylab('Number of Images') + 
+  coord_cartesian(ylim = c(0, 800)) +
+  theme(text = element_text(size=12, family='Times New Roman'), plot.title = element_text(size=12, hjust = 0.5))
+
+plot.scopy = ggplot(data=square_copy, aes(x=factor(age))) + 
+  geom_bar(stat="count", fill="steelblue") +
+  theme_minimal() + 
+  ggtitle('Square Copying') + 
+  xlab('Age') + 
+  ylab('Number of Images') + 
+  coord_cartesian(ylim = c(0, 800)) +
+  theme(text = element_text(size=12, family='Times New Roman'), plot.title = element_text(size=12, hjust = 0.5))
+
+plot.strace = ggplot(data=square_trace, aes(x=factor(age))) + 
+  geom_bar(stat="count", fill="steelblue") +
+  theme_minimal() + 
+  ggtitle('Square Tracing') + 
+  xlab('Age') + 
+  ylab('Number of Images') + 
+  coord_cartesian(ylim = c(0, 800)) +
+  theme(text = element_text(size=12, family='Times New Roman'), plot.title = element_text(size=12, hjust = 0.5))
+
+plot.shtrace = ggplot(data=shape_trace, aes(x=factor(age))) + 
+  geom_bar(stat="count", fill="steelblue") +
+  theme_minimal() + 
+  ggtitle('Star Tracing') + 
+  xlab('Age') + 
+  ylab('Number of Images') + 
+  coord_cartesian(ylim = c(0, 800)) +
+  theme(text = element_text(size=12, family='Times New Roman'), plot.title = element_text(size=12, hjust = 0.5))
+
+plot_grid(plot.strace, plot.shtrace, plot.ccopy, plot.scopy, ncol=2, nrow=2, scale=0.9)
+ggsave("sec2_f1.png")
+```
+Import adult ratings for museumstation data
+```{r}
+d1 = read.csv('exp_data/MuseumStation_Tracing_Descriptives_cdm_run_v3.csv')
+d2 = read.csv('exp_data/MuseumStation_Tracing_Descriptives_cdm_run_v4.csv')
+d3 = read.csv('exp_data/MuseumStation_Tracing_Descriptives_v4_this_square.csv')
+d3$age <- gsub('age', '', d3$age)
+d3$age = as.numeric(d3$age)
+d_all = rbind(d1, d2)
+d_all$age = as.numeric(gsub('age', '', d_all$age))
+
+d_circle = d_all[d_all$category=='this circle',]
+d_square = d_all[d_all$category=='square', ]
+d_star = d_all[d_all$category=='shape',]
+```
+
+```{r}
+dsquare_trace = ggplot(d_square, aes(x=factor(age), y=draw_duration_new)) + 
+  stat_summary(fun.y="mean", geom="bar", fill='steelblue') +
+  stat_summary(fun.data = mean_se, geom = "errorbar", aes(width=0.2)) + 
+  theme_minimal() + 
+  ggtitle('Square Tracing') + 
+  xlab('Age') + 
+  ylab('Drawing Duration (s)') + 
+  coord_cartesian(ylim = c(0, 10)) +
+  theme(text = element_text(size=12, family='Times New Roman'), plot.title = element_text(size=12, hjust = 0.5))
+
+dstar_trace = ggplot(d_star, aes(x=factor(age), y=draw_duration_new)) + 
+  stat_summary(fun.y="mean", geom="bar", fill='steelblue') +
+  stat_summary(fun.data = mean_se, geom = "errorbar", aes(width=0.2)) + 
+  theme_minimal() + 
+  ggtitle('Star Tracing') + 
+  xlab('Age') + 
+  ylab('Drawing Duration (s)') + 
+  coord_cartesian(ylim = c(0, 10)) +
+  theme(text = element_text(size=12, family='Times New Roman'), plot.title = element_text(size=12, hjust = 0.5))
+
+dcircle_copy = ggplot(d_circle, aes(x=factor(age), y=draw_duration_new)) + 
+  stat_summary(fun.y="mean", geom="bar", fill='steelblue') +
+  stat_summary(fun.data = mean_se, geom = "errorbar", aes(width=0.2)) + 
+  theme_minimal() + 
+  ggtitle('Circle Copying') + 
+  xlab('Age') + 
+  ylab('Drawing Duration (s)') + 
+  coord_cartesian(ylim = c(0, 10)) +
+  theme(text = element_text(size=12, family='Times New Roman'), plot.title = element_text(size=12, hjust = 0.5))
+
+dsquare_copy = ggplot(d3, aes(x=factor(age), y=draw_duration_new)) + 
+  stat_summary(fun.y="mean", geom="bar", fill='steelblue') +
+  stat_summary(fun.data = mean_se, geom = "errorbar", aes(width=0.2)) + 
+  theme_minimal() + 
+  ggtitle('Square Copying') + 
+  xlab('Age') + 
+  ylab('Drawing Duration (s)') + 
+  coord_cartesian(ylim = c(0, 10)) +
+  theme(text = element_text(size=12, family='Times New Roman'), plot.title = element_text(size=12, hjust = 0.5))
+
+plot_grid(dsquare_trace, dstar_trace,dcircle_copy, dsquare_copy, ncol=2, nrow=2, scale=0.9)
+ggsave("sec2_f2.png")
+```
+```{r}
+d_total = rbind(d_all, d3)
+cor.test(d_total$age, d_total$draw_duration_new)
+```
+
+```{r}
+mdata2 = read.csv('tracing_final.csv')
+mdata2$category = factor(mdata2$category, levels = c('square', 'shape', 'circle'))
+
+mdata2$has_ref = as.logical(mdata2$has_ref)
+rater_data = mdata2[mdata2$button_pressed!=-10,]
+rater_data$button_pressed = factor(rater_data$button_pressed, levels = c(0, 1, 2, 3, 4), ordered=TRUE)
+
+trace = rater_data[rater_data$has_ref==TRUE,]
+copy = rater_data[rater_data$has_ref==FALSE,]
+```
+
+```{r}
+rater_data$button_pressed = as.numeric(rater_data$button_pressed2, levels = c(0, 1, 2, 3, 4), ordered=TRUE)
+low_rating = rater_data[rater_data$button_pressed<3,]
+print(nrow(low_rating)/nrow(rater_data))
+
+trace = rater_data[rater_data$has_ref==TRUE,]
+copy = rater_data[rater_data$has_ref==FALSE,]
+
+hr_trace = trace[trace$button_pressed>3,]
+hr_copy = copy[copy$button_pressed>3,]
+print(nrow(hr_trace)/nrow(trace))
+print(nrow(hr_copy)/nrow(copy))
+print('-----------------')
+# shape division
+square_trace = trace[trace$category=='square',]
+star_trace = trace[trace$category=='shape',]
+circle_copy = copy[copy$category=='circle',]
+square_copy = copy[copy$category=='square',]
+
+st_high = square_trace[square_trace$button_pressed>3, ]
+sc_high = square_copy[square_copy$button_pressed>3, ]
+strace_high = star_trace[star_trace$button_pressed>3, ]
+cc_high = circle_copy[circle_copy$button_pressed>3, ]
+
+print(nrow(st_high)/nrow(square_trace))
+print(nrow(sc_high)/(nrow(square_copy)))
+print(nrow(strace_high)/nrow(star_trace))
+print(nrow(cc_high)/nrow(circle_copy))
+```
+
+```{r}
+pdata = rater_data
+pdata$button_pressed = as.numeric(pdata$button_pressed)
+ptable = prop.table(table(pdata$age, pdata$button_pressed), 1)
+df.sorted = arrange(data.frame(ptable), Var1, Var2)
+df_cumsum = ddply(df.sorted, 'Var1', transform, label_ypos=cumsum(Freq))
+
+df_cumsum %>%
+  ggplot(aes(x=Var1, y=Freq, fill=Var2)) + 
+  geom_bar(aes(fill=Var2),  stat='identity', position=position_fill(reverse=TRUE)) +
+  theme_minimal() + 
+  ggtitle('Distribution of Ratings over Age') + 
+  xlab('Age') + 
+  ylab('Proportion of Rating Scores') + 
+  scale_fill_brewer(palette = 'Blues', name = "Scores", labels = c("1 POOR", "2", "3", "4", "5 EXCELLENT")) + 
+  theme(text = element_text(size=12, family='Times New Roman'), plot.title = element_text(size=12, hjust = 0.5))
+ggsave('sec3_f1.png')
+```
+Plots for rating scores distributions
+```{r}
+rate.sqt = trace[trace$category == 'square',]
+rate.stt = trace[trace$category == 'shape',]
+rate.sqc = copy[copy$category == 'square',]
+rate.cic = copy[copy$category == 'circle',]
+
+pdata = rate.sqt
+pdata$button_pressed = as.numeric(pdata$button_pressed)
+ptable = prop.table(table(pdata$age, pdata$button_pressed), 1)
+df.sorted = arrange(data.frame(ptable), Var1, Var2)
+df_cumsum = ddply(df.sorted, 'Var1', transform, label_ypos=cumsum(Freq))
+
+plot.sqt=ggplot(df_cumsum, aes(x=Var1, y=Freq, fill=Var2)) + 
+  geom_bar(aes(fill=Var2),  stat='identity', position=position_fill(reverse=TRUE)) +
+  theme_minimal() + 
+  ggtitle('Square Tracing') + 
+  xlab('Age') + 
+  ylab('Proportion of Rating Scores') + 
+  scale_fill_brewer(palette = 'Blues', name = "Scores", labels = c("1 POOR", "2", "3", "4", "5 EXCELLENT")) + 
+  theme(text = element_text(size=10, family='Times New Roman'), plot.title = element_text(size=10, hjust = 0.5))
+
+pdata = rate.cic
+pdata$button_pressed = as.numeric(pdata$button_pressed)
+ptable = prop.table(table(pdata$age, pdata$button_pressed), 1)
+df.sorted = arrange(data.frame(ptable), Var1, Var2)
+df_cumsum = ddply(df.sorted, 'Var1', transform, label_ypos=cumsum(Freq))
+
+plot.cic=ggplot(df_cumsum, aes(x=Var1, y=Freq, fill=Var2)) + 
+  geom_bar(aes(fill=Var2),  stat='identity', position=position_fill(reverse=TRUE)) +
+  theme_minimal() + 
+  ggtitle('Circle Copying') + 
+  xlab('Age') + 
+  ylab('Proportion of Rating Scores') + 
+  scale_fill_brewer(palette = 'Blues', name = "Scores", labels = c("1 POOR", "2", "3", "4", "5 EXCELLENT")) + 
+  theme(text = element_text(size=10, family='Times New Roman'), plot.title = element_text(size=10, hjust = 0.5))
+
+pdata = rate.stt
+pdata$button_pressed = as.numeric(pdata$button_pressed)
+ptable = prop.table(table(pdata$age, pdata$button_pressed), 1)
+df.sorted = arrange(data.frame(ptable), Var1, Var2)
+df_cumsum = ddply(df.sorted, 'Var1', transform, label_ypos=cumsum(Freq))
+
+plot.stt=ggplot(df_cumsum, aes(x=Var1, y=Freq, fill=Var2)) + 
+  geom_bar(aes(fill=Var2),  stat='identity', position=position_fill(reverse=TRUE)) +
+  theme_minimal() + 
+  ggtitle('Star Tracing') + 
+  xlab('Age') + 
+  ylab('Proportion of Rating Scores') + 
+  scale_fill_brewer(palette = 'Blues', name = "Scores", labels = c("1 POOR", "2", "3", "4", "5 EXCELLENT")) + 
+  theme(text = element_text(size=10, family='Times New Roman'), plot.title = element_text(size=10, hjust = 0.5))
+
+pdata = rate.sqc
+pdata$button_pressed = as.numeric(pdata$button_pressed)
+ptable = prop.table(table(pdata$age, pdata$button_pressed), 1)
+df.sorted = arrange(data.frame(ptable), Var1, Var2)
+df_cumsum = ddply(df.sorted, 'Var1', transform, label_ypos=cumsum(Freq))
+
+plot.sqc=ggplot(df_cumsum, aes(x=Var1, y=Freq, fill=Var2)) + 
+  geom_bar(aes(fill=Var2),  stat='identity', position=position_fill(reverse=TRUE)) +
+  theme_minimal() + 
+  ggtitle('Square Copying') + 
+  xlab('Age') + 
+  ylab('Proportion of Rating Scores') + 
+  scale_fill_brewer(palette = 'Blues', name = "Scores", labels = c("1 POOR", "2", "3", "4", "5 EXCELLENT")) + 
+  theme(text = element_text(size=10, family='Times New Roman'), plot.title = element_text(size=10, hjust = 0.5))
+
+plot_grid(plot.sqt, plot.stt, plot.cic, plot.sqc, ncol=2, nrow=2)
+ggsave('sec3_f2.png', width = 8.5, height = 4.51, units = "in")
+```
+
+```{r}
+num_trial = distinct(rater_data, session_id, category, has_ref)
+```
+
+```{r}
+unique_sid = unique(rater_data[c('session_id','category', 'has_ref')])
+num_count = 1:nrow(unique_sid)
+
+for(i in 1:nrow(unique_sid)){
+  current = unique_sid[i,]
+  num_count[i] = nrow(rater_data[rater_data$session_id==current$session_id & rater_data$category==current$category & rater_data$has_ref==current$has_ref, ])
+}
+print (max(num_count))
+print (min(num_count))
+print(length(num_count))
+```
+Plots for Ink Proportions
+```{r}
+ipdata = read.csv('museumstation_ink_prop.csv')
+ipdata$has_ref = as.logical(ipdata$has_ref)
+ptrace = ipdata[ipdata$has_ref==TRUE,]
+pcopy = ipdata[ipdata$has_ref==FALSE,]
+
+psquare_trace = ptrace[ptrace$category == 'square',]
+pstar_trace = ptrace[ptrace$category=='shape',]
+pcircle_copy = pcopy[pcopy$category=='circle',]
+psquare_copy = pcopy[pcopy$category=='square',]
+```
+
+```{r}
+# square 0.0252, shape 0.0463125, circle 0.03246875
+ip.sqt = ggplot(psquare_trace, aes(x=factor(age),y=ink_prop)) +
+  stat_summary(fun.y="mean", geom="bar", fill='steelblue') +
+  stat_summary(fun.data = mean_se, geom = "errorbar", aes(width=0.2)) + 
+  geom_hline(yintercept = 0.0252,linetype='dashed', color="black") + 
+  theme_minimal() + 
+  ggtitle('Square Tracing') + 
+  xlab('Age') + 
+  ylab('Ink Proportion') + 
+  coord_cartesian(ylim = c(0, 0.07)) + 
+  theme(text = element_text(size=12, family='Times New Roman'), plot.title = element_text(size=12, hjust = 0.5))
+
+ip.stt = ggplot(pstar_trace, aes(x=factor(age),y=ink_prop)) +
+  stat_summary(fun.y="mean", geom="bar", fill='steelblue') +
+  stat_summary(fun.data = mean_se, geom = "errorbar", aes(width=0.2)) + 
+  geom_hline(yintercept = 0.0463125,linetype='dashed', color="black") + 
+  theme_minimal() + 
+  ggtitle('Star Tracing') + 
+  xlab('Age') + 
+  ylab('Ink Proportion') + 
+  coord_cartesian(ylim = c(0, 0.07)) +
+  theme(text = element_text(size=12, family='Times New Roman'), plot.title = element_text(size=12, hjust = 0.5))
+
+ip.sqc = ggplot(psquare_copy, aes(x=factor(age),y=ink_prop)) +
+  stat_summary(fun.y="mean", geom="bar", fill='steelblue') +
+  stat_summary(fun.data = mean_se, geom = "errorbar", aes(width=0.2)) + 
+  geom_hline(yintercept = 0.0252,linetype='dashed', color="black") + 
+  theme_minimal() + 
+  ggtitle('Square Copying') + 
+  xlab('Age') + 
+  ylab('Ink Proportion') + 
+  coord_cartesian(ylim = c(0, 0.07)) +
+  theme(text = element_text(size=12, family='Times New Roman'), plot.title = element_text(size=12, hjust = 0.5))
+
+ip.cic = ggplot(pcircle_copy, aes(x=factor(age),y=ink_prop)) +
+  stat_summary(fun.y="mean", geom="bar", fill='steelblue') +
+  stat_summary(fun.data = mean_se, geom = "errorbar", aes(width=0.2)) + 
+  geom_hline(yintercept = 0.03246875,linetype='dashed', color="black") + 
+  theme_minimal() + 
+  ggtitle('Circle Copying') + 
+  xlab('Age') + 
+  ylab('Ink Proportion') + 
+  coord_cartesian(ylim = c(0, 0.07)) +
+  theme(text = element_text(size=12, family='Times New Roman'), plot.title = element_text(size=12, hjust = 0.5))
+
+
+plot_grid(ip.sqt, ip.stt, ip.cic, ip.sqc, nrow=2, ncol=2)
+ggsave('sec2_fig3.png')
+```
+
+interrater reliability
+```{r}
+unique_sid = unique(rater_data[c('session_id','category', 'has_ref')])
+agreement = 1:nrow(unique_sid)
+moreThan3 = 0
+agree3 = 0
+agree2 = 0
+
+for(i in 1:nrow(unique_sid)){
+  current = unique_sid[i,]
+  trials = rater_data[rater_data$session_id==current$session_id & rater_data$category==current$category &   rater_data$has_ref==current$has_ref, ]
+  if (nrow(trials)>=3){
+    first_three = trials[1:3,]['button_pressed']
+    moreThan3 = moreThan3 + 1
+   
+     if (first_three[1,]==first_three[2,] && first_three[2,]==first_three[3,]){
+      agree3 = agree3 + 1
+    }else if (first_three[1,]==first_three[2,] || first_three[2,]==first_three[3,] || first_three[1,]==first_three[3,]){
+      agree2 = agree2 + 1
+    }
+    
+  agreement[i] = nrow(trials[trials$button_pressed==mode,])/nrow(trials)
+  }
+  
+}
+print (moreThan3)
+print (agree3)
+print (agree2)
+print(length(agreement))
+```
+
+```{r}
+score_range= 1:nrow(unique_sid)
+
+for(i in 1:nrow(unique_sid)){
+  current = unique_sid[i,]
+  trials = rater_data[rater_data$session_id==current$session_id & rater_data$category==current$category &   rater_data$has_ref==current$has_ref, ]
+  ux = unique(trials$button_pressed)
+  score_range[i] = max(ux) - min(ux)
+}
+print (max(agreement))
+print (min(agreement))
+print(length(agreement))
+```
+
+```{r}
+unique_sid = unique(rater_data[c('session_id','category', 'has_ref')])
+rater1 = 1:2057
+rater2 = 1:2057
+rater3 = 1:2057
+
+j = 1
+for(i in 1:nrow(unique_sid)){
+  current = unique_sid[i,]
+  trials = rater_data[rater_data$session_id==current$session_id & rater_data$category==current$category &   rater_data$has_ref==current$has_ref, ]
+  if (nrow(trials)>=3){
+    rater1[j] = trials[1,]['button_pressed']
+    rater2[j] = trials[2,]['button_pressed']
+    rater3[j] = trials[3,]['button_pressed']
+    j = j + 1
+  }
+  
+}
+```
+
+```{r}
+rater1 = as.numeric(rater1)
+rater2 = as.numeric(rater2)
+rater3 = as.numeric(rater3)
+
+```
+
+```{r}
+c1 = cor(rater1, rater2)
+c2 = cor(rater1, rater3)
+c3 = cor(rater3, rater2)
+mean(c(c1, c2, c3))
+```
+
+

@@ -1,0 +1,309 @@
+---
+title: "Model Comparison on Tracing Data"
+output: html_document
+---
+
+
+```{r}
+library(tidyverse)
+library(lme4)
+library(groupdata2)
+library(dplyr)
+library(knitr) 
+library(broom) 
+library(hydroGOF)
+library(MASS)
+library(DescTools)
+library(broom)
+library(brms)
+library(reshape2)
+library(caret)
+```
+
+#### Preprocessing
+##### Load data and convert types
+```{r}
+mdata = read.csv('tracing_final.csv')
+mdata$category = factor(mdata$category, levels = c('square', 'shape', 'circle'))
+
+mdata$has_ref = as.logical(mdata$has_ref)
+rater_data = mdata[mdata$button_pressed!=-10,]
+rater_data$button_pressed = factor(rater_data$button_pressed, levels = c(0, 1, 2, 3, 4), ordered=TRUE)
+
+trace = rater_data[rater_data$has_ref==TRUE,]
+copy = rater_data[rater_data$has_ref==FALSE,]
+```
+
+##### Train the model on all human ratings
+
+```{r}
+m2 = "button_pressed ~  post_tran * translate + post_tran * scale + post_tran * rotate + category * post_tran + category * rotate + category * translate + category * scale + (1|worker_id)"
+ord_wid = brm(m2, data=rater_data, family=cumulative("probit"))
+summary(ord_wid)
+```
+
+```{r}
+save(ord_wid, file = "vm_model.rda")
+```
+
+##### Make Prediction on data without ratings
+```{r}
+new_data = read.csv('museumstation_pre_pred.csv')
+new_data = subset(new_data, select = -c(X, Unnamed..0,human_norm_rating))
+new_data$category = factor(new_data$category, levels=c('square', 'shape', 'circle'))
+```
+
+```{r}
+ord.pred = predict(ord_wid, newdata = new_data, re_formula = NA)
+ord.pred = data.frame(ord.pred)
+new_data$final = round(ord.pred$P.Y...1*1 + ord.pred$P.Y...2*2 + ord.pred$P.Y...3*3 + ord.pred$P.Y...4*4)
+```
+
+```{r}
+rownames(new_data) <- 1:nrow(new_data)
+new_data$human_rating[new_data$human_rating != -10] = TRUE
+new_data$human_rating[new_data$human_rating == -10] = FALSE
+colnames(new_data)[colnames(new_data)=="human_rating"] <- "has_human_rating"
+write.csv(new_data, file='museumstation_tracing_ord_pred2.csv')
+```
+
+```{r}
+font_size=14
+pdata = rater_data
+ptable = prop.table(table(pdata$age, pdata$button_pressed), 1)
+df.sorted = arrange(data.frame(ptable), Var1, Var2)
+df_cumsum = ddply(df.sorted, 'Var1', transform, label_ypos=cumsum(Freq))
+
+rater.allp = ggplot(data=df_cumsum, aes(x=Var1, y=Freq, fill=Var2)) + 
+  geom_bar(aes(fill=Var2),  stat='identity', position=position_fill(reverse=TRUE)) +
+  theme_minimal() + 
+  ggtitle('Human Ratings') + 
+  xlab('Age') + 
+  ylab('Proportion of Rating Scores') + 
+  scale_fill_brewer(palette = 'Blues', name = "Scores", labels = c("1 POOR", "2", "3", "4", "5 EXCELLENT")) + 
+  theme(text = element_text(size=font_size, family='Times New Roman'), plot.title = element_text(size=font_size, hjust = 0.5))
+
+pdata = new_data
+ptable = prop.table(table(pdata$age, pdata$final), 1)
+df.sorted = arrange(data.frame(ptable), Var1, Var2)
+df_cumsum = ddply(df.sorted, 'Var1', transform, label_ypos=cumsum(Freq))
+
+ord.allp = ggplot(data=df_cumsum, aes(x=Var1, y=Freq, fill=Var2)) + 
+  geom_bar(aes(fill=Var2),  stat='identity', position=position_fill(reverse=TRUE)) +
+  theme_minimal() + 
+  ggtitle('Model Evaluations') + 
+  xlab('Age') + 
+  ylab('Proportion of Rating Scores') + 
+  scale_fill_brewer(palette = 'Blues', name = "Scores", labels = c("1 POOR", "2", "3", "4", "5 EXCELLENT")) + 
+  theme(text = element_text(size=font_size, family='Times New Roman'), plot.title = element_text(size=font_size, hjust = 0.5))
+
+plot_grid(rater.allp, ord.allp, ncol=2, labels = c('(a)', '(b)'), label_fontfamily = 'Times New Roman',label_size = font_size)
+ggsave('final_dist_comp.png', width=10, height=3.5, units="in")
+```
+
+```{r}
+pdata = rater_data[rater_data$has_ref==TRUE,]
+ptable = prop.table(table(pdata$age, pdata$button_pressed), 1)
+df.sorted = arrange(data.frame(ptable), Var1, Var2)
+df_cumsum = ddply(df.sorted, 'Var1', transform, label_ypos=cumsum(Freq))
+
+rater.trace = ggplot(data=df_cumsum, aes(x=Var1, y=Freq, fill=Var2)) + 
+  geom_bar(aes(fill=Var2),  stat='identity', position=position_fill(reverse=TRUE)) +
+  theme_minimal() + 
+  ggtitle("Human Ratings") + 
+  xlab('Age') + 
+  ylab('Proportion of Rating Scores') + 
+  scale_fill_brewer(palette = 'Blues', name = "Scores", labels = c("1 POOR", "2", "3", "4", "5 EXCELLENT")) + 
+  theme(text = element_text(size=10, family='Times New Roman'), plot.title = element_text(size=10, hjust = 0.5))
+
+pdata = rater_data[rater_data$has_ref==FALSE,]
+ptable = prop.table(table(pdata$age, pdata$button_pressed), 1)
+df.sorted = arrange(data.frame(ptable), Var1, Var2)
+df_cumsum = ddply(df.sorted, 'Var1', transform, label_ypos=cumsum(Freq))
+
+rater.copy = ggplot(data=df_cumsum, aes(x=Var1, y=Freq, fill=Var2)) + 
+  geom_bar(aes(fill=Var2),  stat='identity', position=position_fill(reverse=TRUE)) +
+  theme_minimal() + 
+  ggtitle("Human Ratings") + 
+  xlab('Age') + 
+  ylab('Proportion of Rating Scores') + 
+  scale_fill_brewer(palette = 'Blues', name = "Scores", labels = c("1 POOR", "2", "3", "4", "5 EXCELLENT")) + 
+  theme(text = element_text(size=10, family='Times New Roman'), plot.title = element_text(size=10, hjust = 0.5))
+
+pdata = new_data[new_data$has_ref==TRUE,]
+ptable = prop.table(table(pdata$age, pdata$final), 1)
+df.sorted = arrange(data.frame(ptable), Var1, Var2)
+df_cumsum = ddply(df.sorted, 'Var1', transform, label_ypos=cumsum(Freq))
+
+ord.trace = ggplot(data=df_cumsum, aes(x=Var1, y=Freq, fill=Var2)) + 
+  geom_bar(aes(fill=Var2),  stat='identity', position=position_fill(reverse=TRUE)) +
+  theme_minimal() + 
+  ggtitle("Model Evaluations") + 
+  xlab('Age') + 
+  ylab('Proportion of Rating Scores') + 
+  scale_fill_brewer(palette = 'Blues', name = "Scores", labels = c("1 POOR", "2", "3", "4", "5 EXCELLENT")) + 
+  theme(text = element_text(size=10, family='Times New Roman'), plot.title = element_text(size=10, hjust = 0.5))
+
+pdata = new_data[new_data$has_ref==FALSE,]
+ptable = prop.table(table(pdata$age, pdata$final), 1)
+df.sorted = arrange(data.frame(ptable), Var1, Var2)
+df_cumsum = ddply(df.sorted, 'Var1', transform, label_ypos=cumsum(Freq))
+
+ord.copy = ggplot(data=df_cumsum, aes(x=Var1, y=Freq, fill=Var2)) + 
+  geom_bar(aes(fill=Var2),  stat='identity', position=position_fill(reverse=TRUE)) +
+  theme_minimal() + 
+  ggtitle("Model Evaluations") + 
+  xlab('Age') + 
+  ylab('Proportion of Rating Scores') + 
+  scale_fill_brewer(palette = 'Blues', name = "Scores", labels = c("1 POOR", "2", "3", "4", "5 EXCELLENT")) + 
+  theme(text = element_text(size=10, family='Times New Roman'), plot.title = element_text(size=10, hjust = 0.5))
+
+plot_grid(rater.trace, ord.trace, nrow=2)
+ggsave('final_trace_comp.png', width = 4.25, height = 4.51, units="in")
+
+plot_grid(rater.copy, ord.copy, nrow=2)
+ggsave('final_copy_comp.png', width = 4.25, height = 4.51, units="in")
+```
+
+```{r}
+new_data$final2 = as.numeric(new_data$final, levels = c(0, 1, 2, 3, 4), ordered=TRUE)
+new_data$age2 = new_data$age^2
+agem = 'final2~age'
+aget1 = lm(agem, new_data)
+summary(aget1)
+```
+```{r}
+new_trace = new_data[new_data$has_ref==TRUE,]
+new_copy = new_data[new_data$has_ref==FALSE,]
+t.test(new_trace$final2, new_copy$final2)
+t.test(trace$button_pressed2, copy$button_pressed2)
+```
+
+```{r}
+aget_trace = lm(agem, new_trace)
+summary(aget_trace)
+aget_copy = lm(agem, new_copy)
+summary(aget_copy)
+```
+
+```{r}
+rater.age = lm("button_pressed~age", rater_data)
+summary(rater.age)
+```
+
+```{r}
+rage.trace = lm("button_pressed~age", trace)
+summary(rage.trace)
+rage.copy = lm("button_pressed~age", copy)
+summary(rage.copy)
+```
+
+# Model evaluations - low score
+```{r}
+new_data$final2 = as.numeric(new_data$final, levels = c(0, 1, 2, 3, 4), ordered=TRUE)
+low_rating = new_data[new_data$final2<2,]
+print(nrow(low_rating)/nrow(new_data))
+```
+```{r}
+new_data$final15 = new_data$final2 + 1
+```
+
+```{r}
+font_size=16
+final = ggplot(new_data, aes(x=age, y=final15)) + 
+  geom_point(stat="summary", size=3, fun.y="mean", color='steelblue') +
+  geom_errorbar(stat="summary", fun.data="mean_se", width=0.1, color='steelblue3') + 
+  theme_minimal() + 
+  geom_smooth(col='grey', span=10, method="loess")  + 
+  xlab("Age") +
+  ylab("Model Evaluation Scores") + 
+  scale_x_continuous(breaks=seq(2,10,1)) + 
+  theme(text = element_text(size=font_size, family='Times New Roman'))
+
+final.rater = ggplot(rater_data, aes(x=age, y=button_pressed2)) + 
+  geom_point(stat="summary", size=3, fun.y="mean", color='steelblue') +
+  geom_errorbar(stat="summary", fun.data="mean_se", width=0.1, color='steelblue3') + 
+  theme_minimal() + 
+  geom_smooth(col='grey', span=10, method="loess")  + 
+  xlab("Age") +
+  ylab("Human Ratings") + 
+  scale_x_continuous(breaks=seq(2,10,1)) + 
+  theme(text = element_text(size=font_size, family='Times New Roman'))
+```
+
+```{r}
+trialtype = ggplot(new_data, aes(x=age, y=final15, color=has_ref)) + 
+  geom_point(stat="summary", size=3, fun.y="mean") +
+  geom_errorbar(stat="summary", fun.data="mean_se", width=0.1) + 
+  theme_minimal() + 
+  geom_smooth(aes(x=age, y=final15, group=has_ref), col='grey', span=10, method="loess")  + 
+  xlab("Age") +
+  ylab("Model Evaluation Scores") + 
+  scale_x_continuous(breaks=seq(2,10,1)) + 
+  scale_color_manual(name="Trial Types", labels = c("Copying", "Tracing"), values = c("FALSE"="steelblue1", "TRUE"="steelblue4")) +
+  theme(text = element_text(size=font_size, family='Times New Roman'))
+plot_grid(final, trialtype, ncol=2, labels = c('(a)', '(b)'), label_fontfamily = 'Times New Roman',label_size = font_size)
+
+trialtype.rater = ggplot(rater_data, aes(x=age, y=button_pressed2, color=has_ref)) + 
+  geom_point(stat="summary", size=3, fun.y="mean") +
+  geom_errorbar(stat="summary", fun.data="mean_se", width=0.1) + 
+  theme_minimal() + 
+  geom_smooth(aes(x=age, y=button_pressed2, group=has_ref), col='grey', span=10, method="loess")  + 
+  xlab("Age") +
+  ylab("Human Ratings") + 
+  scale_x_continuous(breaks=seq(2,10,1)) + 
+  scale_color_manual(name="Trial Types", labels = c("Copying", "Tracing"), values = c("FALSE"="steelblue1", "TRUE"="steelblue4")) +
+  theme(text = element_text(size=font_size, family='Times New Roman'))
+
+plot_grid(final.rater, trialtype.rater, final, trialtype, ncol=2, nrow=2, labels = c('(a)', '(b)', '(c)', '(d)'), label_fontfamily = 'Times New Roman',label_size = font_size)
+
+ggsave('age_final2.png', width=12, height=8, units="in")
+```
+
+
+```{r}
+unique_sid = unique(trace[c('session_id','category')])
+num_count = 1:nrow(unique_sid)
+
+for(i in 1:nrow(unique_sid)){
+  current = unique_sid[i,]
+  num_count[i] = nrow(trace[trace$session_id==current$session_id & trace$category==current$category, ])
+}
+print (max(num_count))
+print (min(num_count))
+print(length(num_count))
+```
+
+```{r}
+trace_2 = new_trace[new_trace$has_human_rating==1,]
+for (t in c('square', 'shape')){
+  for (i in seq(2, 10, by=1) ){
+    sub = subset(trace_2 , category == t & age == i)
+    print (c(t, i, nrow(sub)) )
+  }
+}
+```
+
+# make predictions on a new dataset
+```{r}
+photodraw = read.csv('tracing_eval2.csv')
+photodraw = subset(photodraw, select = -c(X, Unnamed..0,human_norm_rating))
+photodraw$category = factor(photodraw$category, levels=c('square', 'shape', 'circle'))
+```
+
+
+```{r}
+pdata = trace
+pdata$button_pressed = as.numeric(pdata$button_pressed)
+ptable = prop.table(table(pdata$age, pdata$button_pressed), 1)
+df.sorted = arrange(data.frame(ptable), Var1, Var2)
+df_cumsum = ddply(df.sorted, 'Var1', transform, label_ypos=cumsum(Freq))
+
+df_cumsum %>%
+  ggplot(aes(x=Var1, y=Freq, fill=Var2)) + 
+  geom_bar(aes(fill=Var2),  stat='identity', position=position_fill(reverse=TRUE)) +
+  theme_minimal() + 
+  scale_fill_brewer(palette = 'Blues') + 
+  xlab('age') + 
+  ylab('ordinal rating proportion')
+```
