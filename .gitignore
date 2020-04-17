@@ -6,5 +6,5 @@ __pycache__/
 .DS_Store
 .idea
 .idea/*
-.png
+*.png
 */auth.txt
