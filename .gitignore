@@ -10,3 +10,4 @@ __pycache__/
 */auth.txt
 .DS_Store
 */.DS_Store
+.ipynb_checkpoints
