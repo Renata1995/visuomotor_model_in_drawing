@@ -1,7 +1,7 @@
 
 #### 1. Use pull_tracing_svg_400x400.ipynb to Pull 400 x 400 size image from SVG data.
 - Date will be stored in a local folder. Each tracing category has a distinct folder inside
-- Filename:<age>_<session_id>_<category>.png
+- Filename: age_session_id_category.png
 
 #### 2. Use calculate_shape_spatial.ipynb to calculate shape error and spatial error for each tracing image.
 - An output file kiddraw_tracing_<iternation_name>.csv will be generated
