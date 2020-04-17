@@ -8,3 +8,5 @@ __pycache__/
 .idea/*
 *.png
 */auth.txt
+.DS_Store
+*/.DS_Store

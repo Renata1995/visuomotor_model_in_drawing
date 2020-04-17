@@ -22,9 +22,14 @@ library(caret)
 ```{r}
 load("vm_model.rda")
 
+# read the orig file
+filename = 'kiddraw_tracing_cdm_run_v5.csv'
+new_data = read.csv(filename)
 
-# fill in the following code
-# new_data = csv.read('filename')
-# pred = predict(ord.wid, new_data)
+# predict on new data
+ord.pred = predict(ord_wid, new_data, re_formula = NA)
+ord.pred = data.frame(ord.pred)
+new_data$rating = round(ord.pred$P.Y...1*1 + ord.pred$P.Y...2*2 + ord.pred$P.Y...3*3 + ord.pred$P.Y...4*4)
+write.csv(new_data, paste0("rated_", filename))
 ```
 
